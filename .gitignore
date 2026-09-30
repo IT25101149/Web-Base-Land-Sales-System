@@ -1,0 +1,22 @@
+# Compiled class file
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Log files
+*.log
+
+# Package / Bundled Maven
+apache-maven-*/
+
+# OS & IDE files
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Sensitive & Session files
+cookies*.txt
+legal_cookies.txt
+
+# Uploaded user files (optional, exclude uploads if needed)
+uploads/
