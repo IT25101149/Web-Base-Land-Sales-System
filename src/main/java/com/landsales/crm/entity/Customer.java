@@ -1,182 +1,49 @@
-package com.landsales.crm.controller;
+package com.landsales.crm.entity;
 
-import com.landsales.crm.entity.Customer;
-import com.landsales.crm.service.CustomerPortalService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.Authentication;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import jakarta.persistence.*;
 
-@Controller
-@RequestMapping("/customer")
-public class CustomerPortalController {
+@Entity
+public class Customer {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    @Autowired
-    private CustomerPortalService portalService;
+    private String username;
+    private String name;
+    private String email;
+    private String phone;
+    private String address;
 
-    @Autowired(required = false)
-    private com.landsales.admin.service.AuditLogService auditLogService;
+    public Customer() {}
 
-    @GetMapping({"", "/portal", "/dashboard"})
-    public String customerPortal(Model model, Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return "redirect:/login";
-        }
-        String username = authentication.getName();
-        Customer customer = portalService.getCustomerByUsername(username);
-
-        model.addAttribute("customer", customer);
-        model.addAttribute("wishlist", portalService.getWishlist(username));
-        model.addAttribute("inquiries", portalService.getCustomerInquiries(username));
-        model.addAttribute("reservations", portalService.getCustomerReservations(username));
-        model.addAttribute("reviews", portalService.getReviewsByCustomer(username));
-        model.addAttribute("supportRequests", portalService.getSupportRequests(username));
-        model.addAttribute("feedbacks", portalService.getPlatformFeedback(username));
-
-        return "customer/portal";
+    public Customer(Long id, String username, String name, String email, String phone, String address) {
+        this.id = id;
+        this.username = username;
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+        this.address = address;
     }
 
-    @PostMapping("/reservation/submit-payment")
-    public String submitPaymentProof(@RequestParam("saleId") Long saleId,
-                                     @RequestParam("paymentReference") String paymentReference,
-                                     @RequestParam(value = "paymentSlipUrl", required = false) String paymentSlipUrl,
-                                     Authentication authentication,
-                                     RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
-
-        try {
-            portalService.submitCustomerPaymentProof(saleId, authentication.getName(), paymentReference, paymentSlipUrl);
-            redirectAttributes.addFlashAttribute("portalSuccess", "Payment receipt & reference submitted successfully! The Sales Manager will review and verify your payment shortly.");
-        } catch (Exception e) {
-            redirectAttributes.addFlashAttribute("portalError", "Failed to submit payment proof: " + e.getMessage());
-        }
-        return "redirect:/customer/portal?tab=reservations";
+    public Customer(Long id, String name, String email, String phone, String address) {
+        this.id = id;
+        this.name = name;
+        this.email = email;
+        this.phone = phone;
+        this.address = address;
     }
 
-    @PostMapping("/reservation/upload-docs")
-    public String uploadBuyerDocs(@RequestParam("saleId") Long saleId,
-                                  @RequestParam("buyerFullName") String buyerFullName,
-                                  @RequestParam("buyerNic") String buyerNic,
-                                  @RequestParam(value = "nicImageUrl", required = false) String nicImageUrl,
-                                  @RequestParam(value = "addressProofUrl", required = false) String addressProofUrl,
-                                  @RequestParam(value = "notes", required = false) String notes,
-                                  Authentication authentication,
-                                  RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
 
-        try {
-            portalService.updateCustomerBuyerDocs(saleId, authentication.getName(), buyerFullName, buyerNic, nicImageUrl, addressProofUrl, notes);
-            if (auditLogService != null) {
-                auditLogService.log("SUBMIT_BUYER_DOCS", "CUSTOMER",
-                        "Customer '" + authentication.getName() + "' submitted legal deed documents (NIC: " + buyerNic + ", Name: " + buyerFullName + ") for Reservation #" + saleId);
-            }
-            redirectAttributes.addFlashAttribute("portalSuccess", "Buyer Legal Documents & NIC Submitted Successfully! Your reservation is now In Processing — waiting for Legal Officer approval & deed drafting.");
-        } catch (Exception e) {
-            redirectAttributes.addFlashAttribute("portalError", "Failed to submit documents: " + e.getMessage());
-        }
-        return "redirect:/customer/portal?tab=reservations";
-    }
-
-    @PostMapping("/profile/update")
-    public String updateProfile(@RequestParam("name") String name,
-                                @RequestParam("email") String email,
-                                @RequestParam("phone") String phone,
-                                @RequestParam("address") String address,
-                                @RequestParam(value = "newPassword", required = false) String newPassword,
-                                Authentication authentication,
-                                RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
-
-        String username = authentication.getName();
-        portalService.updateCustomerProfile(username, name, email, phone, address, newPassword);
-        if (auditLogService != null) {
-            auditLogService.log("UPDATE_PROFILE", "CUSTOMER", "Customer '" + username + "' updated their profile information");
-        }
-        redirectAttributes.addFlashAttribute("profileSuccess", "Your profile has been updated successfully!");
-        return "redirect:/customer/portal?tab=profile";
-    }
-
-    @PostMapping("/wishlist/toggle")
-    public String toggleWishlist(@RequestParam("propertyId") Long propertyId,
-                                 @RequestParam(value = "redirectUrl", defaultValue = "/customer/portal?tab=wishlist") String redirectUrl,
-                                 Authentication authentication,
-                                 RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
-
-        String username = authentication.getName();
-        boolean added = portalService.toggleWishlist(username, propertyId);
-        if (added) {
-            redirectAttributes.addFlashAttribute("wishlistMsg", "Property added to your Wishlist!");
-        } else {
-            redirectAttributes.addFlashAttribute("wishlistMsg", "Property removed from your Wishlist.");
-        }
-        return "redirect:" + redirectUrl;
-    }
-
-    @GetMapping("/wishlist/remove/{propertyId}")
-    public String removeFromWishlist(@PathVariable("propertyId") Long propertyId,
-                                     Authentication authentication,
-                                     RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
-
-        String username = authentication.getName();
-        portalService.toggleWishlist(username, propertyId);
-        redirectAttributes.addFlashAttribute("wishlistMsg", "Property removed from wishlist.");
-        return "redirect:/customer/portal?tab=wishlist";
-    }
-
-    @PostMapping("/review/add")
-    public String addReview(@RequestParam("propertyId") Long propertyId,
-                            @RequestParam("rating") int rating,
-                            @RequestParam("comment") String comment,
-                            @RequestParam(value = "redirectUrl", required = false) String redirectUrl,
-                            Authentication authentication,
-                            RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
-
-        String username = authentication.getName();
-        portalService.addReview(username, propertyId, rating, comment);
-        if (auditLogService != null) {
-            auditLogService.log("SUBMIT_REVIEW", "CUSTOMER", "Customer '" + username + "' submitted a " + rating + "-star review on property #" + propertyId);
-        }
-        redirectAttributes.addFlashAttribute("reviewSuccess", "Thank you! Your rating and review have been submitted.");
-
-        if (redirectUrl != null && !redirectUrl.trim().isEmpty()) {
-            return "redirect:" + redirectUrl;
-        }
-        return "redirect:/customer/portal?tab=reviews";
-    }
-
-    @PostMapping("/support/create")
-    public String createSupportRequest(@RequestParam("subject") String subject,
-                                       @RequestParam("category") String category,
-                                       @RequestParam("message") String message,
-                                       Authentication authentication,
-                                       RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
-
-        String username = authentication.getName();
-        portalService.createSupportRequest(username, subject, category, message);
-        if (auditLogService != null) {
-            auditLogService.log("SUPPORT_TICKET", "CUSTOMER", "Customer '" + username + "' opened a support ticket: '" + subject + "' (" + category + ")");
-        }
-        redirectAttributes.addFlashAttribute("supportSuccess", "Support request submitted successfully! Our team will reach out to you.");
-        return "redirect:/customer/portal?tab=support";
-    }
-
-    @PostMapping("/feedback/submit")
-    public String submitPlatformFeedback(@RequestParam("rating") int rating,
-                                         @RequestParam("feedbackType") String feedbackType,
-                                         @RequestParam("comments") String comments,
-                                         Authentication authentication,
-                                         RedirectAttributes redirectAttributes) {
-        if (authentication == null) return "redirect:/login";
-
-        String username = authentication.getName();
-        portalService.submitPlatformFeedback(username, rating, comments, feedbackType);
-        redirectAttributes.addFlashAttribute("feedbackSuccess", "Thank you for your valuable feedback!");
-        return "redirect:/customer/portal?tab=feedback";
-    }
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
 }
