@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import com.landsales.sales.entity.Sale;
 import com.landsales.property.entity.Property;
 import java.time.LocalDateTime;
+//file created
 
 @Entity
 public class LegalDocument {
