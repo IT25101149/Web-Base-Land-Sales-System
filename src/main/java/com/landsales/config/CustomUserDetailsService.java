@@ -27,9 +27,15 @@ public class CustomUserDetailsService implements UserDetailsService {
                 .findFirst()
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + username));
 
+        boolean enabled = !user.isSuspended();
+
         return new org.springframework.security.core.userdetails.User(
                 user.getUsername(),
                 user.getPassword(),
+                enabled, // enabled (false if SUSPENDED)
+                true,    // accountNonExpired
+                true,    // credentialsNonExpired
+                true,    // accountNonLocked
                 Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
         );
     }
