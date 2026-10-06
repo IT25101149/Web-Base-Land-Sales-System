@@ -37,3 +37,33 @@ public class SurveyController {
 
         List<Survey> surveys = surveyService.getAllSurveys();
         List<com.landsales.property.entity.Property> properties = propertyService.getAllProperties();
+
+
+        // Check if any property with PENDING_SURVEY does not have a survey yet, auto-queue it
+        for (com.landsales.property.entity.Property p : properties) {
+            if ("PENDING_SURVEY".equalsIgnoreCase(p.getStatus())) {
+                surveyService.createPendingSurveyForProperty(p);
+            }
+        }
+        // Re-fetch in case any pending surveys were created
+        surveys = surveyService.getAllSurveys();
+
+        long totalSurveys = surveys.size();
+        long approvedSurveys = surveys.stream()
+                .filter(s -> "APPROVED".equalsIgnoreCase(s.getStatus()) || "COMPLETED".equalsIgnoreCase(s.getStatus()))
+                .count();
+        long inProgressSurveys = surveys.stream()
+                .filter(s -> "IN_PROGRESS".equalsIgnoreCase(s.getStatus()) || "PENDING_INSPECTION".equalsIgnoreCase(s.getStatus()) || "PENDING".equalsIgnoreCase(s.getStatus()))
+                .count();
+        double totalValuation = surveys.stream()
+                .filter(s -> "APPROVED".equalsIgnoreCase(s.getStatus()) || "COMPLETED".equalsIgnoreCase(s.getStatus()))
+                .mapToDouble(s -> s.getValuationAmount() != null ? s.getValuationAmount() : 0.0)
+                .sum();
+
+        List<Survey> pendingList = surveys.stream()
+                .filter(s -> !"APPROVED".equalsIgnoreCase(s.getStatus()) && !"COMPLETED".equalsIgnoreCase(s.getStatus()))
+                .toList();
+
+        List<Survey> certifiedList = surveys.stream()
+                .filter(s -> "APPROVED".equalsIgnoreCase(s.getStatus()) || "COMPLETED".equalsIgnoreCase(s.getStatus()))
+                .toList();
