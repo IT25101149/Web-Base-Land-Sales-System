@@ -80,3 +80,104 @@ public class SurveyService {
             }
         }
     }
+    public List<Survey> getAllSurveys() {
+        return surveyRepository.findAllByOrderBySurveyDateDesc();
+    }
+
+    public Survey getSurveyById(Long id) {
+        return surveyRepository.findById(id).orElse(null);
+    }
+
+    public List<Survey> getSurveysByPropertyId(Long propertyId) {
+        return surveyRepository.findByPropertyId(propertyId);
+    }
+
+    @Transactional
+    public Survey createPendingSurveyForProperty(Property property) {
+        // Check if an existing survey already exists for this property
+        List<Survey> existing = surveyRepository.findByPropertyId(property.getId());
+        if (!existing.isEmpty()) {
+            return existing.get(0);
+        }
+
+        Survey survey = new Survey();
+        survey.setProperty(property);
+        survey.setSurveyNumber("SRV-" + LocalDate.now().getYear() + "-" + String.format("%04d", property.getId()));
+        survey.setSurveyorName("Pending Assignment");
+        survey.setSurveyDate(LocalDate.now());
+        survey.setStatus("PENDING_INSPECTION");
+        survey.setLandExtent(property.getSize() != null ? (property.getSize() + " Perches (Estimated)") : "Pending Demarcation");
+        survey.setValuationAmount(property.getPrice());
+        survey.setGovernmentValuation(property.getPrice() != null ? (property.getPrice() * 0.90) : 0.0);
+        survey.setRemarks("Auto-queued from Property Management. Awaiting field inspection, lot boundary beacons fixing, and official cadastral certification.");
+
+        return surveyRepository.save(survey);
+    }
+
+    @Transactional
+    public Survey approveAndCertifySurvey(Long surveyId, String planNumber, String lotNumber,
+                                          Double certifiedExtent, Double valuationAmount,
+                                          String surveyorName, String remarks) {
+        Survey survey = surveyRepository.findById(surveyId).orElse(null);
+        if (survey != null) {
+            survey.setStatus("APPROVED");
+            if (planNumber != null && !planNumber.trim().isEmpty()) survey.setPlanNumber(planNumber.trim());
+            if (lotNumber != null && !lotNumber.trim().isEmpty()) survey.setLotNumber(lotNumber.trim());
+            if (certifiedExtent != null && certifiedExtent > 0) survey.setLandExtent(certifiedExtent + " Perches");
+            if (valuationAmount != null && valuationAmount > 0) survey.setValuationAmount(valuationAmount);
+            if (surveyorName != null && !surveyorName.trim().isEmpty()) survey.setSurveyorName(surveyorName.trim());
+            if (remarks != null && !remarks.trim().isEmpty()) survey.setRemarks(remarks.trim());
+
+            // Auto-update linked property to AVAILABLE and certified
+            Property property = survey.getProperty();
+            if (property != null) {
+                property.setStatus("AVAILABLE");
+                if (certifiedExtent != null && certifiedExtent > 0) {
+                    property.setSize(certifiedExtent);
+                }
+                if (valuationAmount != null && valuationAmount > 0) {
+                    property.setPrice(valuationAmount);
+                }
+                propertyRepository.save(property);
+
+                if (notificationService != null) {
+                    notificationService.notifyRole("PROPERTY",
+                            "Cadastral Survey Certified: " + property.getTitle(),
+                            "Cadastral Plan #" + (planNumber != null ? planNumber : "N/A") + " (Lot " + (lotNumber != null ? lotNumber : "N/A") + ", " + (certifiedExtent != null ? certifiedExtent + " Perches" : "") + ") has been approved and certified. Plot status is now ACTIVE & AVAILABLE for public sale.",
+                            "/property", "SURVEY");
+                }
+            }
+
+            return surveyRepository.save(survey);
+        }
+        return null;
+    }
+
+    @Transactional
+    public Survey saveSurvey(Survey survey) {
+        if (survey.getStatus() == null || survey.getStatus().trim().isEmpty()) {
+            survey.setStatus("APPROVED");
+        }
+        if (survey.getSurveyDate() == null) {
+            survey.setSurveyDate(LocalDate.now());
+        }
+
+        // If approved, ensure property is AVAILABLE
+        if ("APPROVED".equalsIgnoreCase(survey.getStatus()) || "COMPLETED".equalsIgnoreCase(survey.getStatus())) {
+            if (survey.getProperty() != null) {
+                Property p = survey.getProperty();
+                if ("PENDING_SURVEY".equalsIgnoreCase(p.getStatus())) {
+                    p.setStatus("AVAILABLE");
+                    propertyRepository.save(p);
+                }
+            }
+        }
+
+        return surveyRepository.save(survey);
+    }
+
+    @Transactional
+    public void deleteSurvey(Long id) {
+        surveyRepository.deleteById(id);
+    }
+}
