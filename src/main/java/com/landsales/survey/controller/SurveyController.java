@@ -165,3 +165,40 @@ public class SurveyController {
         }
         return "redirect:/survey";
     }
+
+    @GetMapping("/api/{id}")
+    @ResponseBody
+    public Map<String, Object> getSurveyJson(@PathVariable("id") Long id) {
+        Survey s = surveyService.getSurveyById(id);
+        Map<String, Object> data = new HashMap<>();
+        if (s != null) {
+            data.put("id", s.getId());
+            data.put("surveyNumber", s.getSurveyNumber());
+            data.put("surveyorName", s.getSurveyorName());
+            data.put("surveyDate", s.getSurveyDate() != null ? s.getSurveyDate().toString() : "");
+            data.put("planNumber", s.getPlanNumber());
+            data.put("lotNumber", s.getLotNumber());
+            data.put("landExtent", s.getLandExtent());
+            data.put("northBoundary", s.getNorthBoundary());
+            data.put("southBoundary", s.getSouthBoundary());
+            data.put("eastBoundary", s.getEastBoundary());
+            data.put("westBoundary", s.getWestBoundary());
+            data.put("valuationAmount", s.getValuationAmount());
+            data.put("governmentValuation", s.getGovernmentValuation());
+            data.put("topography", s.getTopography());
+            data.put("accessRoadWidth", s.getAccessRoadWidth());
+            data.put("utilitiesStatus", s.getUtilitiesStatus());
+            data.put("status", s.getStatus());
+            data.put("surveyPlanUrl", s.getSurveyPlanUrl());
+            data.put("remarks", s.getRemarks());
+            if (s.getProperty() != null) {
+                data.put("propertyId", s.getProperty().getId());
+                data.put("propertyTitle", s.getProperty().getTitle());
+                data.put("propertyLocation", s.getProperty().getLocation());
+                data.put("propertyPrice", s.getProperty().getPrice());
+            }
+        }
+        return data;
+    }
+}
+
