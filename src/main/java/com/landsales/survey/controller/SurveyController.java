@@ -67,3 +67,101 @@ public class SurveyController {
         List<Survey> certifiedList = surveys.stream()
                 .filter(s -> "APPROVED".equalsIgnoreCase(s.getStatus()) || "COMPLETED".equalsIgnoreCase(s.getStatus()))
                 .toList();
+
+        model.addAttribute("surveys", surveys);
+        model.addAttribute("pendingSurveysList", pendingList);
+        model.addAttribute("certifiedSurveysList", certifiedList);
+        model.addAttribute("properties", properties);
+        model.addAttribute("totalSurveys", totalSurveys);
+        model.addAttribute("approvedSurveys", approvedSurveys);
+        model.addAttribute("inProgressSurveys", inProgressSurveys);
+        model.addAttribute("totalValuation", totalValuation);
+        model.addAttribute("isSurveyor", isSurveyor);
+
+        return "survey/list";
+    }
+
+    @PostMapping("/approve")
+    public String approveSurvey(@RequestParam("surveyId") Long surveyId,
+                                @RequestParam(value = "planNumber", required = false) String planNumber,
+                                @RequestParam(value = "lotNumber", required = false) String lotNumber,
+                                @RequestParam(value = "certifiedExtent", required = false) Double certifiedExtent,
+                                @RequestParam(value = "valuationAmount", required = false) Double valuationAmount,
+                                @RequestParam(value = "surveyorName", required = false) String surveyorName,
+                                @RequestParam(value = "remarks", required = false) String remarks,
+                                org.springframework.security.core.Authentication authentication,
+                                RedirectAttributes redirectAttributes) {
+        boolean isSurveyor = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SURVEY") || a.getAuthority().equals("ROLE_ADMIN"));
+        if (!isSurveyor) {
+            redirectAttributes.addFlashAttribute("surveyError", "Access Denied: Property Managers have Read-Only view of Surveys. Official certification, plan submission, and deletions are restricted to Licensed Surveyors.");
+            return "redirect:/survey";
+        }
+
+        try {
+            Survey s = surveyService.approveAndCertifySurvey(surveyId, planNumber, lotNumber, certifiedExtent, valuationAmount, surveyorName, remarks);
+            if (s != null && s.getProperty() != null) {
+                auditLogService.log("CERTIFY_SURVEY", "SURVEY", "Certified Cadastral Survey Plan '" + planNumber + "' (Lot " + lotNumber + ", " + certifiedExtent + " Perches, Val: LKR " + String.format("%,.0f", valuationAmount != null ? valuationAmount : 0.0) + ") for plot '" + s.getProperty().getTitle() + "'. Plot activated to AVAILABLE.");
+                redirectAttributes.addFlashAttribute("surveySuccess", "Cadastral Survey for '" + s.getProperty().getTitle() + "' successfully approved & certified! The property is now ACTIVE and available for public sale.");
+            } else {
+                auditLogService.log("CERTIFY_SURVEY", "SURVEY", "Certified survey plan #" + surveyId + " successfully.");
+                redirectAttributes.addFlashAttribute("surveySuccess", "Survey plan certified and approved successfully!");
+            }
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute("surveyError", "Failed to approve survey: " + e.getMessage());
+        }
+        return "redirect:/survey";
+    }
+
+    @PostMapping("/save")
+    public String saveSurvey(@ModelAttribute Survey survey,
+                             @RequestParam(value = "propertyId", required = false) Long propertyId,
+                             @RequestParam(value = "surveyDateStr", required = false) String surveyDateStr,
+                             org.springframework.security.core.Authentication authentication,
+                             RedirectAttributes redirectAttributes) {
+        boolean isSurveyor = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SURVEY") || a.getAuthority().equals("ROLE_ADMIN"));
+        if (!isSurveyor) {
+            redirectAttributes.addFlashAttribute("surveyError", "Access Denied: Property Managers have Read-Only view of Surveys. Official certification, plan submission, and deletions are restricted to Licensed Surveyors.");
+            return "redirect:/survey";
+        }
+
+        try {
+            if (propertyId != null) {
+                survey.setProperty(propertyService.getPropertyById(propertyId));
+            }
+            if (surveyDateStr != null && !surveyDateStr.trim().isEmpty()) {
+                survey.setSurveyDate(LocalDate.parse(surveyDateStr.trim()));
+            } else if (survey.getSurveyDate() == null) {
+                survey.setSurveyDate(LocalDate.now());
+            }
+
+            surveyService.saveSurvey(survey);
+            auditLogService.log("SAVE_SURVEY", "SURVEY", "Registered/Updated Cadastral Survey Plan " + survey.getPlanNumber() + " (" + survey.getSurveyNumber() + ") by " + survey.getSurveyorName());
+            redirectAttributes.addFlashAttribute("surveySuccess", "Survey & Valuation report for " + survey.getSurveyNumber() + " saved successfully!");
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute("surveyError", "Failed to save survey: " + e.getMessage());
+        }
+        return "redirect:/survey";
+    }
+
+    @GetMapping("/delete/{id}")
+    public String deleteSurvey(@PathVariable("id") Long id,
+                               org.springframework.security.core.Authentication authentication,
+                               RedirectAttributes redirectAttributes) {
+        boolean isSurveyor = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_SURVEY") || a.getAuthority().equals("ROLE_ADMIN"));
+        if (!isSurveyor) {
+            redirectAttributes.addFlashAttribute("surveyError", "Access Denied: Property Managers have Read-Only view of Surveys. Official certification, plan submission, and deletions are restricted to Licensed Surveyors.");
+            return "redirect:/survey";
+        }
+
+        try {
+            surveyService.deleteSurvey(id);
+            auditLogService.log("DELETE_SURVEY", "SURVEY", "Deleted Cadastral Survey record #" + id);
+            redirectAttributes.addFlashAttribute("surveySuccess", "Survey record #" + id + " deleted successfully.");
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute("surveyError", "Failed to delete survey: " + e.getMessage());
+        }
+        return "redirect:/survey";
+    }
